@@ -3,120 +3,65 @@ from config import config
 
 
 class DBManager:
-    """
-    Класс для работы с информацией из Базы Данных.
-    """
-    def __init__(self):
-        self.params_db = config()
+    def __init__(self, db_name):
+        self.db_name = db_name
+        self.conn = psycopg2.connect(dbname=self.db_name, **config())
 
-    def create_database(self, database_name):
+    def get_companies_and_vacancies_count(self):
         """
-        Создание базы данных.
+        Получает список всех компаний и количество вакансий у каждой компании
         """
-        conn = psycopg2.connect(dbname='postgres', **self.params_db)
-        conn.autocommit = True
+        with self.conn:
+            with self.conn.cursor() as cursor:
+                cursor.execute('SELECT employer_name, COUNT(vacancy_name) FROM vacancies JOIN employer '
+                               'ON employer.employer_id=vacancies.company_id GROUP BY employer_name '
+                               'ORDER BY COUNT(vacancy_name) DESC')
+                data = cursor.fetchall()
+                print(data)
 
-        cur = conn.cursor()
-
-        cur.execute(f'DROP DATABASE IF EXISTS {database_name}')
-        cur.execute(f'CREATE DATABASE {database_name}')
-
-        cur.close()
-        conn.close()
-
-    def create_tables(self, database_name):
+    def get_all_vacancies(self):
         """
-        Создание таблиц companies и vacancies в созданной базе данных HH_vacancy
+        Получает список всех вакансий с указанием названия компании, названия вакансии и зарплаты и ссылки на вакансию
         """
-        with psycopg2.connect(dbname=database_name, **self.params_db) as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                CREATE TABLE companies (
-                company_id SERIAL PRIMARY KEY,
-                company_name VARCHAR UNIQUE
-                )
-                """)
+        with self.conn:
+            with self.conn.cursor() as cursor:
+                cursor.execute('SELECT employer_name, vacancy_name, salary_from, salary_to, url FROM vacancies  '
+                               'JOIN employer ON employer.employer_id=vacancies.company_id ORDER BY employer_name')
+                data = cursor.fetchall()
+                print(data)
 
-                cur.execute("""
-                CREATE TABLE vacancies (
-                vacancy_id serial,
-                vacancy_name text not null,
-                salary int,
-                company_name text REFERENCES companies(company_name) NOT NULL,
-                vacancy_url varchar not null,
-                foreign key(company_name) references companies(company_name)
-                )
-                """)
-
-        conn.close()
-
-    def save_info_to_database(self, database_name, employers_dict, vacancies_list):
-        with psycopg2.connect(dbname=database_name, **self.params_db) as conn:
-            with conn.cursor() as cur:
-                for employer in employers_dict:
-                    cur.execute(
-                        f"INSERT INTO companies(company_name) values ('{employer}')"
-                    )
-                for vacancy in vacancies_list:
-                    cur.execute(
-                        f"INSERT INTO vacancies(vacancy_name, salary, company_name, vacancy_url) values "
-                        f"('{vacancy['vacancy_name']}', '{int(vacancy['salary'])}', "
-                        f"'{vacancy['employer']}', '{vacancy['url']}'"
-                    )
-
-        conn.close()
-
-    def get_companies_and_vacancies_count(self, database_name):
-        """
-        Получает список всех компаний и количество вакансий у каждой компании.
-        """
-        with psycopg2.connect(dbname=database_name, **self.params_db) as conn:
-            with conn.cursor() as cur:
-                cur.execute('SELECT company_name, COUNT(vacancy_name) from vacancies GROUP BY company_name')
-                answer = cur.fetchall()
-        conn.close()
-        return answer
-
-    def get_all_vacancies(self, database_name):
-        """
-        Получает список всех вакансий
-        """
-        with psycopg2.connect(dbname=database_name, **self.params_db) as conn:
-            with conn.cursor() as cur:
-                cur.execute('SELECT * from vacancies')
-                answer = cur.fetchall()
-        conn.close()
-        return answer
-
-    def get_avg_salary(self, database_name):
+    def get_avg_salary(self):
         """
         Получает среднюю зарплату по вакансиям
         """
-        with psycopg2.connect(dbname=database_name, **self.params_db) as conn:
-            with conn.cursor() as cur:
-                cur.execute('SELECT avg(salary) from vacancies')
-                answer = cur.fetchall()
-        conn.close()
-        return answer
+        with self.conn:
+            with self.conn.cursor() as cursor:
+                cursor.execute('SELECT vacancy_name, AVG(salary_from) FROM vacancies GROUP BY vacancy_name')
+                data = cursor.fetchall()
+                print(data)
 
-    def get_vacancies_with_higher_salary(self, database_name):
+    def get_vacancies_with_higher_salary(self):
         """
         Получает список всех вакансий, у которых зарплата выше средней по всем вакансиям
         """
-        with psycopg2.connect(dbname=database_name, **self.params_db) as conn:
-            with conn.cursor() as cur:
-                cur.execute('SELECT vacancy_name from vacancies WHERE salary > (SELECT AVG(salary) from vacancies)')
-                answer = cur.fetchall()
-        conn.close()
-        return answer
+        with self.conn:
+            with self.conn.cursor() as cursor:
+                cursor.execute('SELECT * FROM vacancies WHERE salary_from > (SELECT AVG(salary_from) FROM vacancies) '
+                               'ORDER BY salary_from')
+                data = cursor.fetchall()
+                print(data)
 
-    def get_vacancies_with_keyword(self, database_name, keyword):
+    def get_vacancies_with_keyword(self, keyword):
         """
-        Получает список всех вакансий, в названии которых содержатся переданные в метод слова
+        Получает список всех вакансий, в названии которых содержатся переданные в метод слова, например python
         """
-        with psycopg2.connect(dbname=database_name, **self.params_db) as conn:
-            with conn.cursor() as cur:
-                cur.execute(f"SELECT vacancy_name from vacancies WHERE vacancy_name LIKE '%{keyword}%'")
-                answer = cur.fetchall()
-        conn.close()
-        return answer
+        with self.conn:
+            with self.conn.cursor() as cursor:
+                cursor.execute(f"SELECT * FROM vacancies WHERE vacancy_name LIKE '%{keyword}%'")
+                data = cursor.fetchall()
+                print(data)
+
+
+if __name__ == '__main__':
+    x = DBManager('python')
+    x.get_vacancies_with_keyword('Ревизор')
